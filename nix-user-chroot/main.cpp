@@ -235,10 +235,6 @@ int main(int argc, char *argv[]) {
 }
 
 static int child_proc(const char *rootdir, const char *nixdir, uint8_t clear_env, list<struct DirMapping> dirMappings, list<struct SetEnv> envMappings, const char *executable, char * const new_argv[]) {
-  // get uid, gid before going to new namespace
-  uid_t uid = getuid();
-  gid_t gid = getgid();
-
   // "unshare" into new namespace
   if (unshare(CLONE_NEWNS | CLONE_NEWUSER) < 0) {
     if (errno == EPERM) {
@@ -269,21 +265,6 @@ static int child_proc(const char *rootdir, const char *nixdir, uint8_t clear_env
   if (mount(nixdir, path_buf, "none", MS_BIND | MS_REC, NULL) < 0) {
     err_exit("mount(%s, %s)", nixdir, path_buf);
   }
-
-  // fixes issue #1 where writing to /proc/self/gid_map fails
-  // see user_namespaces(7) for more documentation
-  int fd_setgroups = open("/proc/self/setgroups", O_WRONLY);
-  if (fd_setgroups > 0) {
-    write(fd_setgroups, "deny", 4);
-    close(fd_setgroups);
-  }
-
-  // map the original uid/gid in the new ns
-  char map_buf[1024];
-  snprintf(map_buf, sizeof(map_buf), "%d %d 1", uid, uid);
-  update_map(map_buf, "/proc/self/uid_map");
-  snprintf(map_buf, sizeof(map_buf), "%d %d 1", gid, gid);
-  update_map(map_buf, "/proc/self/gid_map");
 
   // chroot to rootdir
   if (chroot(rootdir) < 0) {
